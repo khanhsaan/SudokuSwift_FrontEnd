@@ -6,11 +6,13 @@ import {
   Image,
   Button,
   Icon,
-  useColorMode,
   useColorModeValue,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
 } from '@chakra-ui/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import axios from 'axios';
 
 const MotionBox = motion(Box);
 
@@ -24,9 +26,11 @@ const pulseAnimation = {
 };
 
 export const ImageUpload = () => {
-  const [image, setImage] = useState<string | null>(null);
+  const [image, setImage] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const { colorMode } = useColorMode();
+  const [solution, setSolution] = useState<{ original_grid: number[][]; solved_grid: number[][]; solution_image: string } | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -46,7 +50,7 @@ export const ImageUpload = () => {
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => {
-        setImage(reader.result as string);
+        setImage(file);
       };
       reader.readAsDataURL(file);
     }
@@ -57,7 +61,7 @@ export const ImageUpload = () => {
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => {
-        setImage(reader.result as string);
+        setImage(file);
       };
       reader.readAsDataURL(file);
     }
@@ -66,20 +70,59 @@ export const ImageUpload = () => {
   const handleSolve = async () => {
     if (!image) return;
 
+    setIsLoading(true);
+    setError(null);
+    setSolution(null);
+    
     try {
       console.log('Sending image to the server...');
       const formData = new FormData();
       formData.append('file', image);
 
-      const response = await axios.post('http://your-backend-url/solve', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+      const API_URL = import.meta.env.VITE_API_URL || 'http://3.26.96.93:8000';
+      const response = await fetch(`${API_URL}/solve`, {
+        method: 'POST',
+        body: formData,
       });
 
-      console.log('Solved Sudoku:', response.data);
+      console.log('Response status:', response.status);
+      console.log('Response headers:', response.headers);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Full response data:', data);
+      console.log('Response keys:', Object.keys(data));
+
+      // Check multiple possible response structures
+      if (data.success && data.solution_image) {
+        console.log('Setting solution with success=true structure');
+        setSolution({
+          original_grid: data.original_grid || [],
+          solved_grid: data.solved_grid || [],
+          solution_image: data.solution_image,
+        });
+      } else if (data.solution_image) {
+        // Handle case where there's no success field but solution_image exists
+        console.log('Setting solution without success field');
+        setSolution({
+          original_grid: data.original_grid || [],
+          solved_grid: data.solved_grid || [],
+          solution_image: data.solution_image,
+        });
+      } else {
+        console.error('No solution_image found in response:', data);
+        const errorMessage = data.error || 'Unknown error occurred';
+        console.error('Error from server:', errorMessage);
+        setError(errorMessage);
+      }
     } catch (error) {
       console.error('Error solving Sudoku:', error);
+      setError(error instanceof Error ? error.message : 'Failed to connect to server');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -90,7 +133,14 @@ export const ImageUpload = () => {
   const textColor = useColorModeValue('gray.600', 'gray.300');
 
   return (
-    <Stack direction="column" spacing={6} width="100%" align="center">
+    <Stack 
+      direction="column" 
+      spacing={6} 
+      width="100%" 
+      align="center"
+      justify="center"
+      textAlign="center"
+    >
       <AnimatePresence mode="wait">
         <MotionBox
           width="100%"
@@ -121,7 +171,7 @@ export const ImageUpload = () => {
           {image ? (
             <Box position="relative" width="100%" height="100%" p={4} display="flex" alignItems="center" justifyContent="center">
               <Image
-                src={image}
+                src={URL.createObjectURL(image)}
                 alt="Uploaded sudoku"
                 maxW="100%"
                 maxH="100%"
@@ -190,6 +240,8 @@ export const ImageUpload = () => {
               fontSize="lg"
               py={7}
               boxShadow="lg"
+              isLoading={isLoading}
+              loadingText="Solving..."
               _hover={{
                 transform: 'translateY(-2px)',
                 boxShadow: 'xl',
@@ -204,6 +256,45 @@ export const ImageUpload = () => {
           </MotionBox>
         )}
       </AnimatePresence>
+
+      {error && (
+        <Alert status="error" borderRadius="md" width="100%" textAlign="center">
+          <AlertIcon />
+          <Box width="100%">
+            <AlertTitle>Error!</AlertTitle>
+            <AlertDescription>
+              {error.includes('OpenCV') 
+                ? 'The server is missing required dependencies. Please install OpenCV on the server.'
+                : error
+              }
+            </AlertDescription>
+          </Box>
+        </Alert>
+      )}
+
+      {solution && (
+        <Box 
+          mt={6} 
+          width="100%"
+          display="flex" 
+          flexDirection="column" 
+          alignItems="center"
+          justifyContent="center"
+        >
+          <Text fontSize="lg" fontWeight="bold" mb={4}>Here Is Solved Sudoku:</Text>
+          <Image src={`data:image/png;base64,${solution.solution_image}`} alt="Solution" maxW="70%" />
+          <Button mt={4} colorScheme="blue" onClick={() => {
+            const link = document.createElement('a');
+            link.href = `data:image/png;base64,${solution.solution_image}`;
+            link.download = 'solved_sudoku.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }}>
+            Download Image
+          </Button>
+        </Box>
+      )}
     </Stack>
   );
 }; 
