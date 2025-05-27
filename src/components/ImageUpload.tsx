@@ -10,6 +10,7 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react';
 import { motion, AnimatePresence } from 'framer-motion';
+import axios from 'axios';
 
 const MotionBox = motion(Box);
 
@@ -62,9 +63,24 @@ export const ImageUpload = () => {
     }
   }, []);
 
-  const handleSolve = () => {
-    // TODO: Implement solving logic
-    console.log('Solving sudoku...');
+  const handleSolve = async () => {
+    if (!image) return;
+
+    try {
+      console.log('Sending image to the server...');
+      const formData = new FormData();
+      formData.append('file', image);
+
+      const response = await axios.post('http://your-backend-url/solve', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      console.log('Solved Sudoku:', response.data);
+    } catch (error) {
+      console.error('Error solving Sudoku:', error);
+    }
   };
 
   const bgColor = useColorModeValue('white', 'gray.700');
