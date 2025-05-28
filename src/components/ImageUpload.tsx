@@ -79,17 +79,25 @@ export const ImageUpload = () => {
       const formData = new FormData();
       formData.append('file', image);
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://3.26.96.93:8000';
+      const API_URL = 'https://api.sudokuswift.com';
+      console.log('Making request to:', `${API_URL}/solve`);
+      
       const response = await fetch(`${API_URL}/solve`, {
         method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+        },
         body: formData,
       });
 
-      console.log('Response status:', response.status);
+      console.log('Response status:', response.status); 
       console.log('Response headers:', response.headers);
+      console.log('Response URL:', response.url);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error('Error response:', errorText);
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
       }
 
       const data = await response.json();
